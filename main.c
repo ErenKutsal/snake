@@ -6,28 +6,32 @@
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
+
 struct Node {
-    int data;
+    int row;
+    int col;
     struct Node* next;
 };
 
-struct Node* createNode (int data) {
+struct Node* createNode (int row, int col) {
     struct Node* newNode = (struct Node*) malloc(sizeof(struct Node));
     if (!newNode) {
         printf("Memory allocation failed!");
         exit(1);
     }
-    newNode->data = data;
+    newNode->row = row;
+    newNode->col = col;
     newNode->next = NULL;
     return newNode;
 }
 
-void append (struct Node** head, int data) {
+void append (struct Node** head, int row, int col) {
     if (*head == NULL) {
-        *head = createNode(data);
+        *head = createNode(row, col);
         return;
     }
-    struct Node* newNode = createNode(data);
+    struct Node* newNode = createNode(row, col);
     struct Node* temp = *head;
     while (temp->next != NULL) {
         temp = temp->next;
@@ -77,40 +81,58 @@ void setNonBlocking(int enable) {
 #define rows 12
 
 void drawNode(struct Node* node) {
-    int row = node->data / cols + 1;
-    int col = node->data % cols;
-    if (col == 0) {
-        col = 48;
-    }
+    int row = node->row;
+    int col = node->col;
     printf("\033[%d;%dH", row, col);
     printf("S");
-    printf("\033[%d;%dH", rows, cols);
-    printf("\nrow: %d\ncol: %d\n", row, col);
 }
 
 void drawNodes(struct Node* head) {
     struct Node* temp = head;
+    //printf("\033[%d;%dH", rows, cols);
+    //printf("\nrow: %d\ncol: %d\n", head->row, head->col);
     while (temp != NULL) {
         drawNode(temp);
         temp = temp->next;
     }
 }
 
-void addNodeToStart(struct Node** head, int data) {
-    struct Node* newNode = createNode(data);
+void addNodeToStart(struct Node** head, int row, int col) {
+    struct Node* newNode = createNode(row, col);
     newNode->next = *head;
     *head = newNode;
 }
 
-void moveNodes(struct Node* head, int diff) {
-    int oldData = head->data;
-    head->data += diff;
-    int currentData;
+void moveNodes(struct Node* head, int row, int col) {
+    int oldRow = head->row;
+    int oldCol = head->col;
+    head->row = row;
+    head->col = col;
+    if (head->col > cols) {
+        head->col = cols;
+        return;
+    } else if (head->col < 1) {
+        head->col = 1;
+        return;
+    }
+    if (head->row > rows) {
+        head->row = rows;
+        return;
+    } else if (head->row < 1) {
+        head->row = 1;
+        return;
+    }
+
+    int currentRow;
+    int currentCol;
     struct Node* temp = head->next;
     while (temp != NULL) {
-        currentData = temp->data;
-        temp->data = oldData;
-        oldData = currentData;
+        currentRow = temp->row;
+        currentCol = temp->col;
+        temp->row = oldRow;
+        temp->col = oldCol;
+        oldRow = currentRow;
+        oldCol = currentCol;
         temp = temp->next;
     }
 }
@@ -126,43 +148,45 @@ void end(struct Node* head) {
 }
 int main ()
 {
+    srand(time(NULL));
+
     initTerminal();
     setNonBlocking(1);
 
-    int randomNumber = 40;
+    int randomRow = rand() % (rows + 1);
+    int randomCol = rand() % (cols + 1);
 
-    struct Node* head = createNode(50);
+    struct Node* head = createNode(2, 2);
     char c;
     while (1) {
 
         clearScreen();
 
         if (read(STDIN_FILENO, &c, 1) > 0) {
-            int diff = 0;
+            int predictedRow = head->row;
+            int predictedCol = head->col;
             switch (c) {
                 case 'w':
-                    diff = -cols;
+                    predictedRow += -1;
                     break;
                 case 'a':
-                    diff = -1;
+                    predictedCol += -1;
                     break;
                 case 's':
-                    diff = cols;
+                    predictedRow += 1;
                     break;
                 case 'd':
-                    diff = 1;
+                    predictedCol += 1;
                     break;
                 default:
                     break;
             }
-
-            if (head->data + diff == randomNumber) {
-                printf("\033[%d;%dH", rows + 5, 0);
-                printf("hit!!");
-                addNodeToStart(&head, randomNumber);
-                randomNumber = ((randomNumber * 97) % cols * rows) + 1;
+            if (predictedCol == randomCol && predictedRow == randomRow) {
+                addNodeToStart(&head, randomRow, randomCol);
+                randomRow = rand() % (rows + 1) + 1;
+                randomCol = rand() % (cols + 1) + 1;
             } else {
-                moveNodes(head, diff);
+                moveNodes(head, predictedRow, predictedCol);
             }
             if (c == 'q') break;
         }
@@ -173,7 +197,7 @@ int main ()
             printf("\n");
         }
 
-        drawApple((randomNumber / cols) + 1, randomNumber % cols);
+        drawApple(randomRow, randomCol);
         drawNodes(head);
 
         fflush(stdout);   // Ensure output is printed immediately
